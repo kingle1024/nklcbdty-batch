@@ -3,12 +3,13 @@
   <groupId>com.nklcbdty</groupId>
   <artifactId>nklcbdty-common</artifactId>
   <versioning>
-    <latest>0.10.3</latest>
-    <release>0.10.3</release>
+    <latest>0.10.4</latest>
+    <release>0.10.4</release>
     <versions>
       <version>0.10.1</version>
       <version>0.10.3</version>
+      <version>0.10.4</version>
     </versions>
-    <lastUpdated>20260803012910</lastUpdated>
+    <lastUpdated>20260816063002</lastUpdated>
   </versioning>
 </metadata>
