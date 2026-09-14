@@ -45,17 +45,46 @@ jobs:
       # 그래서 자격증명이 있을 때만 로그인·푸시하고, 없으면 빌드·테스트까지만 하고 끝낸다.
       # 초록불을 "배포됨"으로 오해하지 않도록 요약에 이미지가 안 올라갔다고 남긴다.
       # 이 저장소에 DOCKER_TOKEN 을 넣으면 그때부터 여기서 바로 푸시된다(포크 동기화 불필요).
+      # 시크릿이 "있긴 한데 모양이 틀린" 경우도 잡는다. 값에 공백·줄바꿈·비ASCII 가 섞이면
+      # docker/login-action 은 `malformed HTTP Authorization header` 라는, 원인을 알 수 없는
+      # 레지스트리 에러로 죽는다(2026-09-14 에 실제로 겪었다 — 값이 틀린 게 아니라 모양이 문제).
+      # 값은 절대 찍지 않고 길이·ASCII 여부·앞뒤 공백만 본다.
       - name: Check Docker credentials
         id: docker
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
         run: |
-          if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_TOKEN" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_TOKEN" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          bad=0
+          for name in DOCKER_USERNAME DOCKER_TOKEN; do
+            eval "value=\$$name"
+            len=$(printf '%s' "$value" | wc -c | tr -d ' ')
+            trimmed=$(printf '%s' "$value" | tr -d '[:space:]' | wc -c | tr -d ' ')
+            if printf '%s' "$value" | LC_ALL=C grep -q '[^[:print:]]'; then
+              echo "::error::$name 에 출력 불가 문자(줄바꿈 등)가 들어 있다. 길이=$len"
+              bad=1
+            elif printf '%s' "$value" | LC_ALL=C grep -q '[^ -~]'; then
+              echo "::error::$name 에 비ASCII 문자가 들어 있다(한글 등). 길이=$len"
+              bad=1
+            elif [ "$len" != "$trimmed" ]; then
+              echo "::error::$name 에 공백이 들어 있다. 길이=$len, 공백 제외=$trimmed"
+              bad=1
+            else
+              echo "$name 모양 정상 (길이=$len)"
+            fi
+          done
+
+          if [ "$bad" = "1" ]; then
+            echo "시크릿을 다시 등록해야 한다 — 값 전체를 공백·줄바꿈 없이 넣는다."
+            exit 1
+          fi
+
+          echo "available=true" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
         if: steps.docker.outputs.available == 'true'
