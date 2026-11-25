@@ -19,6 +19,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobInstance;
+import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.repository.JobRepository;
@@ -41,6 +43,7 @@ import com.nklcbdty.common.user.repository.UserInterestRepositoryImpl;
 // COMPLETED / write_count=1 로 기록됐다. EmailService 가 발송 예외를 삼켰기 때문이다.
 // 운영과 같은 스텝 설정(EmailBatchConfig 의 retry/skip)으로 돌려서, SMTP 실패가
 // 스텝 FAILED 로 드러나는지 확인한다. JobRepository 는 기록만 하는 쪽이라 mock 으로 둔다.
+@org.junit.jupiter.api.Timeout(20)
 class EmailSendingStepFailureTest {
 
     private JavaMailSender mailSender;
@@ -112,7 +115,7 @@ class EmailSendingStepFailureTest {
     }
 
     private StepExecution run() throws Exception {
-        JobExecution jobExecution = new JobExecution(1L);
+        JobExecution jobExecution = new JobExecution(new JobInstance(1L, "emailBatchJob"), 1L, new JobParameters());
         StepExecution stepExecution = jobExecution.createStepExecution("emailSendingStep");
         step.execute(stepExecution);
         return stepExecution;
