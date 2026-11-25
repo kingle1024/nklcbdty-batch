@@ -1,6 +1,8 @@
 package com.nklcbdty.batch.nklcbdty.batch.email.run;
 
+import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
@@ -33,10 +35,16 @@ public class EmailBatchScheduler {
                     .addLong("time", System.currentTimeMillis())
                     .toJobParameters();
 
-            jobLauncher.run(emailBatchJob, jobParameters);
-            log.info("🎉 이메일 발송 배치 실행 완료!");
+            // jobLauncher.run 은 잡이 FAILED 로 끝나도 예외를 던지지 않는다.
+            // 예전에는 결과를 안 보고 무조건 "완료!" 를 찍어서 로그로도 실패를 알 수 없었다.
+            JobExecution execution = jobLauncher.run(emailBatchJob, jobParameters);
+            if (execution.getStatus() == BatchStatus.COMPLETED) {
+                log.info("🎉 이메일 발송 배치 완료: {}", EmailJobResult.summarize(execution));
+            } else {
+                log.error("😭 이메일 발송 배치 실패: {}", EmailJobResult.summarize(execution));
+            }
         } catch (Exception e) {
-            log.error("😭 이메일 발송 배치 실행 중 오류 발생: {}", e.getMessage());
+            log.error("😭 이메일 발송 배치 실행 중 오류 발생: {}", e.getMessage(), e);
         }
     }
 }
