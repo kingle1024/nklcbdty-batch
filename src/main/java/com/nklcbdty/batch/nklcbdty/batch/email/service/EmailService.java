@@ -8,15 +8,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import jakarta.mail.AuthenticationFailedException;
 import jakarta.mail.MessagingException;
-import jakarta.mail.SendFailedException;
 import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.MimeMessage;
 
 import com.nklcbdty.common.vo.UserInterestVo;
 import com.querydsl.core.Tuple;
 
+import org.springframework.mail.MailAuthenticationException;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -44,6 +44,13 @@ public class EmailService {
     private final UserInterestRepositoryImpl userInterestRepositoryImpl;
     private final JobRepository jobRepositoryInterface;
 
+    /**
+     * 메일 한 통을 보낸다. 실패하면 예외를 그대로 올린다.
+     * 예전에는 여기서 예외를 로그만 찍고 삼켜서, Gmail 로그인이 막혀도 배치가 COMPLETED
+     * (write_count=1) 로 남았다 — 2026-11 아침 메일이 안 오는데 기록상으론 매일 "성공"이던 원인.
+     * 이제 실패는 스텝의 retry(3회) 를 거쳐 잡을 FAILED 로 만든다. 잘못된 주소만
+     * IllegalArgumentException 으로 올려 skip 대상이 되게 한다(다른 수신자는 계속 보낸다).
+     */
     public void sendEmail(String to, String subject, String body) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -54,14 +61,16 @@ public class EmailService {
             mailSender.send(message);
         } catch (AddressException e) {
             log.error("메일 발송 실패 - 잘못된 이메일 주소 형식: {}", to, e);
-        } catch (AuthenticationFailedException e) {
-            log.error("메일 발송 실패 - 인증 오류: {}", e.getMessage(), e);
-        } catch (SendFailedException e) {
-            log.error("메일 발송 실패 - 메시징 오류: {}", e.getMessage(), e);
+            throw new IllegalArgumentException("잘못된 이메일 주소: " + to, e);
         } catch (MessagingException e) {
-            log.error("메일 발송 실패 - 스프링 메일 오류: {}", e.getMessage(), e);
-        } catch (Exception e) {
-            log.error("메일 발송 중 예상치 못한 오류 발생", e);
+            log.error("메일 발송 실패 - 메시지 작성 오류: {}", e.getMessage(), e);
+            throw new IllegalStateException("메일 작성 실패: " + e.getMessage(), e);
+        } catch (MailAuthenticationException e) {
+            log.error("메일 발송 실패 - SMTP 인증 오류(MAIL_PASSWORD 앱 비밀번호 확인): {}", e.getMessage(), e);
+            throw e;
+        } catch (MailException e) {
+            log.error("메일 발송 실패 - SMTP 오류: {}", e.getMessage(), e);
+            throw e;
         }
     }
 
